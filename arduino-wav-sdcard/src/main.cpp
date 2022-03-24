@@ -10,6 +10,8 @@
 #include <WAVFileReader.h>
 #include <WAVFileWriter.h>
 #include "config.h"
+#include <M5Core2.h>
+
 
 void wait_for_button_push()
 {
@@ -45,6 +47,7 @@ void record(I2SSampler *input, const char *fname)
   delete writer;
   free(samples);
   ESP_LOGI(TAG, "Finished recording");
+  M5.Lcd.println("Finished recording");
 }
 
 void play(Output *output, const char *fname)
@@ -55,8 +58,10 @@ void play(Output *output, const char *fname)
   // create a new wave file writer
   WAVFileReader *reader = new WAVFileReader(fp);
   ESP_LOGI(TAG, "Start playing");
+  M5.Lcd.println("Start playing");
   output->start(reader->sample_rate());
   ESP_LOGI(TAG, "Opened wav file");
+  M5.Lcd.println("Opened wav file");
   // read until theres no more samples
   while (true)
   {
@@ -109,10 +114,12 @@ void main_task(void *param)
   {
     // wait for the user to push and hold the button
     wait_for_button_push();
-    record(input, "/sdcard/test.wav");
+    record(input, "/sdcard/test1.wav");
+    M5.Lcd.println("recording");
     // wait for the user to push the button again
     wait_for_button_push();
-    play(output, "/sdcard/test.wav");
+    play(output, "/sdcard/test1.wav");
+    M5.Lcd.println("playing");
     vTaskDelay(pdMS_TO_TICKS(1000));
   }
 }
@@ -120,7 +127,10 @@ void main_task(void *param)
 void setup()
 {
   Serial.begin(115200);
+  M5.begin();
+  M5.Lcd.println("Press hold button to record");
   xTaskCreate(main_task, "Main", 4096, NULL, 0, NULL);
+  M5.Lcd.println("test");
 }
 
 void loop()
