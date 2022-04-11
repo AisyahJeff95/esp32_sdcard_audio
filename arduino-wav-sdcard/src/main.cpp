@@ -10,11 +10,43 @@
 #include <WAVFileReader.h>
 #include <WAVFileWriter.h>
 #include "config.h"
-#include <M5Core2.h>
+
+#define DEBOUNCE_TIME  50
+
+int lastSteadyState = LOW; 
+int lastFlickerableState = LOW;
+int currentState;
+
+unsigned long lastDebounceTime = 0;
 
 
 void wait_for_button_push()
 {
+  currentState = digitalRead(GPIO_BUTTON);
+
+  if (currentState != lastFlickerableState) 
+  {
+    // reset the debouncing timer
+    lastDebounceTime = millis();
+    // save the the last flickerable state
+    lastFlickerableState = currentState;
+  }
+
+  if ((millis() - lastDebounceTime) > DEBOUNCE_TIME) 
+  {
+
+    if (lastSteadyState == HIGH && currentState == LOW)
+    
+      vTaskDelay(pdMS_TO_TICKS(100));
+      // Serial.println("The button is pressed");
+
+    else if(lastSteadyState == LOW && currentState == HIGH)
+      Serial.println("NOT PRESSED");
+
+    // save the the last steady state
+    lastSteadyState = currentState;
+  }
+
   while (gpio_get_level(GPIO_BUTTON) == 0)
   {
     vTaskDelay(pdMS_TO_TICKS(100));
@@ -28,6 +60,7 @@ void record(I2SSampler *input, const char *fname)
   input->start();
   // open the file on the sdcard
   FILE *fp = fopen(fname, "wb");
+  
   // create a new wave file writer
   WAVFileWriter *writer = new WAVFileWriter(fp, input->sample_rate());
   // keep writing until the user releases the button
@@ -47,7 +80,6 @@ void record(I2SSampler *input, const char *fname)
   delete writer;
   free(samples);
   ESP_LOGI(TAG, "Finished recording");
-  M5.Lcd.println("Finished recording");
 }
 
 void play(Output *output, const char *fname)
@@ -58,10 +90,8 @@ void play(Output *output, const char *fname)
   // create a new wave file writer
   WAVFileReader *reader = new WAVFileReader(fp);
   ESP_LOGI(TAG, "Start playing");
-  M5.Lcd.println("Start playing");
   output->start(reader->sample_rate());
   ESP_LOGI(TAG, "Opened wav file");
-  M5.Lcd.println("Opened wav file");
   // read until theres no more samples
   while (true)
   {
@@ -72,14 +102,14 @@ void play(Output *output, const char *fname)
     }
     ESP_LOGI(TAG, "Read %d samples", samples_read);
     output->write(samples, samples_read);
-    ESP_LOGI(TAG, "Played samples");
+    // ESP_LOGI(TAG, "Played samples");
   }
   // stop the input
   output->stop();
   fclose(fp);
   delete reader;
-  free(samples);
-  ESP_LOGI(TAG, "Finished playing");
+  // free(samples);
+  // ESP_LOGI(TAG, "Finished playing");
 }
 
 void main_task(void *param)
@@ -97,42 +127,38 @@ void main_task(void *param)
   ESP_LOGI(TAG, "Creating microphone");
 #ifdef USE_I2S_MIC_INPUT
   I2SSampler *input = new I2SMEMSSampler(I2S_NUM_0, i2s_mic_pins, i2s_mic_Config);
+  Serial.println("Sampler was created");
 #else
   I2SSampler *input = new ADCSampler(ADC_UNIT_1, ADC1_CHANNEL_7, i2s_adc_config);
 #endif
 
-#ifdef USE_I2S_SPEAKER_OUTPUT
-  Output *output = new I2SOutput(I2S_NUM_0, i2s_speaker_pins);
-#else
-  Output *output = new DACOutput(I2S_NUM_0);
-#endif
-
-  gpio_set_direction(GPIO_BUTTON, GPIO_MODE_INPUT);
-  gpio_set_pull_mode(GPIO_BUTTON, GPIO_PULLDOWN_ONLY);
+// #ifdef USE_I2S_SPEAKER_OUTPUT
+//   Output *output = new I2SOutput(I2S_NUM_0, i2s_speaker_pins);
+// #else
+//   Output *output = new DACOutput(I2S_NUM_0);
+// #endif
+gpio_set_direction(GPIO_BUTTON, GPIO_MODE_INPUT);
+gpio_set_pull_mode(GPIO_BUTTON, GPIO_PULLDOWN_ONLY);
 
   while (true)
   {
     // wait for the user to push and hold the button
     wait_for_button_push();
-    record(input, "/sdcard/test1.wav");
-    M5.Lcd.println("recording");
-    // wait for the user to push the button again
-    wait_for_button_push();
-    play(output, "/sdcard/test1.wav");
-    M5.Lcd.println("playing");
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    record(input, "/sdcard/test.wav");
+    Serial.println("successful");
+    // // wait for the user to push the button again
+    // wait_for_button_push();
+    // play(output, "/sdcard/test.wav");
+    // vTaskDelay(pdMS_TO_TICKS(1000));
   }
 }
 
 void setup()
 {
   Serial.begin(115200);
-  M5.begin();
-  M5.Lcd.println("Press hold button to record");
   xTaskCreate(main_task, "Main", 4096, NULL, 0, NULL);
-  M5.Lcd.println("test");
 }
 
 void loop()
-{
+{ 
 }
